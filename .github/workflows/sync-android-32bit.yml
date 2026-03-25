@@ -1,0 +1,111 @@
+name: Sync upstream release and publish Android 32-bit
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 * * * *'
+
+permissions:
+  contents: write
+
+jobs:
+  sync-and-build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Get latest upstream release tag
+        id: upstream
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG=$(gh api repos/Predidit/Kazumi/releases/latest --jq .tag_name)
+          if [ -z "$TAG" ] || [ "$TAG" = "null" ]; then
+            echo "Failed to get upstream tag"
+            exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Latest upstream tag: $TAG"
+
+      - name: Check if release already exists in current repo
+        id: exists
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${{ steps.upstream.outputs.tag }}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "Release $TAG already exists in this repo. Skip."
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "Release $TAG does not exist yet."
+          fi
+
+      - name: Stop if already released
+        if: steps.exists.outputs.exists == 'true'
+        run: echo "Already released. Nothing to do."
+
+      - name: Checkout upstream source by tag
+        if: steps.exists.outputs.exists == 'false'
+        uses: actions/checkout@v4
+        with:
+          repository: Predidit/Kazumi
+          ref: ${{ steps.upstream.outputs.tag }}
+
+      - name: Set tag env
+        if: steps.exists.outputs.exists == 'false'
+        run: echo "tag=${{ steps.upstream.outputs.tag }}" >> "$GITHUB_ENV"
+
+      - name: Install dependencies
+        if: steps.exists.outputs.exists == 'false'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake libgtk-3-dev ninja-build libayatana-appindicator3-dev libasound2-dev
+        shell: bash
+
+      - name: Set up JDK 17
+        if: steps.exists.outputs.exists == 'false'
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Set up Flutter
+        if: steps.exists.outputs.exists == 'false'
+        uses: subosito/flutter-action@v2.16.0
+        with:
+          channel: stable
+          flutter-version-file: pubspec.yaml
+
+      - name: Get Flutter dependencies
+        if: steps.exists.outputs.exists == 'false'
+        run: flutter pub get
+        shell: bash
+
+      - name: Build Android 32-bit APK
+        if: steps.exists.outputs.exists == 'false'
+        run: flutter build apk --split-per-abi
+        shell: bash
+
+      - name: Prepare APK
+        if: steps.exists.outputs.exists == 'false'
+        run: |
+          mkdir -p release-files
+          cp build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk \
+             release-files/Kazumi_android_armeabi-v7a_${{ env.tag }}.apk
+        shell: bash
+
+      - name: Upload artifact
+        if: steps.exists.outputs.exists == 'false'
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-32bit-${{ env.tag }}
+          path: release-files/*.apk
+
+      - name: Create GitHub Release
+        if: steps.exists.outputs.exists == 'false'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.tag }}
+          name: ${{ env.tag }}
+          files: release-files/*.apk
+          generate_release_notes: true
