@@ -106,6 +106,16 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.tag }}
-          name: ${{ env.tag }}
+          name: Kazumi Android 32-bit ${{ env.tag }}
           files: release-files/*.apk
-          generate_release_notes: true
+          body: |
+            Android 32-bit (`armeabi-v7a`) build for upstream Kazumi release `${{ env.tag }}`.
+
+            Upstream repository:
+            https://github.com/Predidit/Kazumi
+
+            Upstream release:
+            https://github.com/Predidit/Kazumi/releases/tag/${{ env.tag }}
+
+            Upstream source:
+            https://github.com/Predidit/Kazumi/tree/${{ env.tag }}
