@@ -32,13 +32,18 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           TAG="${{ steps.upstream.outputs.tag }}"
-          if gh release view "$TAG" >/dev/null 2>&1; then
+          if gh api "repos/${{ github.repository }}/releases/tags/$TAG" >/dev/null 2>&1; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
             echo "Release $TAG already exists in this repo. Skip."
           else
             echo "exists=false" >> "$GITHUB_OUTPUT"
             echo "Release $TAG does not exist yet."
           fi
+
+      - name: Debug release existence
+        run: |
+          echo "upstream_tag=${{ steps.upstream.outputs.tag }}"
+          echo "exists=${{ steps.exists.outputs.exists }}"
 
       - name: Stop if already released
         if: steps.exists.outputs.exists == 'true'
@@ -84,6 +89,12 @@ jobs:
       - name: Build Android 32-bit APK
         if: steps.exists.outputs.exists == 'false'
         run: flutter build apk --split-per-abi
+        shell: bash
+
+      - name: Verify 32-bit APK exists
+        if: steps.exists.outputs.exists == 'false'
+        run: |
+          test -f build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk
         shell: bash
 
       - name: Prepare APK
